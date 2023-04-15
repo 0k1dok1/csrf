@@ -1,19 +1,33 @@
-import requests
+require 'uri'
+require 'net/http'
 
-url = input("Enter the URL to check for CSRF vulnerability: ")
+url = URI("<put your url here>")
 cookies = {}
 
-response = requests.get(url)
+Net::HTTP.start(url.host, url.port) do |http|
+  response = http.get(url.path)
+  response.get_fields('set-cookie').each do |cookie|
+    cookies.merge!(Hash[cookie.split(';').map {|val| val.split('=') }])
+  end
+end
 
-if response.cookies:
-    cookies = response.cookies
+data = URI.encode_www_form('<put your POST data here>').concat('&csrf_token=fake_token')
 
-    data = {'some_param': 'some_value', 'csrf_token': 'fake_token'}
-    response = requests.post(url, data=data, cookies=cookies)
+options = {
+  :body => data,
+  :headers => {
+    "Content-Type" => "application/x-www-form-urlencoded",
+    "Cookie" => cookies.map{|k, v| "#{k}=#{v}" }.join(';')
+  },
+  :max_redirects => 0,
+  :read_timeout => 20
+}
+response = Net::HTTP.post(url, options)
 
-    if response.status_code == 403:
-        print(f"The URL {url} has CSRF protection enabled.")
-    else:
-        print(f"The URL {url} does not have CSRF protection enabled.")
-else:
-    print("Could not retrieve cookies from the website.")
+if response.code.to_i == 403
+  puts "The URL #{url} has CSRF protection enabled."
+elsif response.code.to_i == 200
+  puts "The URL #{url} does not have CSRF protection enabled."
+else
+  puts "An error occurred."
+end
